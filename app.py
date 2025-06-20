@@ -29,7 +29,7 @@ for msg in st.session_state.messages:
         st.write(msg["content"])
 
 # Entrada do usuário
-prompt = st.chat_input("Digite sua pergunta fiscal aqui...")
+prompt = st.chat_input("Digite sua pergunta aqui...")
 
 if prompt:
     # Adiciona pergunta do usuário no chat
