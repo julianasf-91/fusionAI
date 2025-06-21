@@ -95,7 +95,7 @@ def fiscal_llm_endpoint(req: func.HttpRequest) -> func.HttpResponse:
             "VALOR NOTA FISCAL. "
             "Você deve responder perguntas sobre notas fiscais com base nesses dados. "
             "Explique brevemente o raciocínio usado antes de apresentar a resposta, especialmente em análises ou cálculos."
-            "Responda sempre em português, com linguagem clara e objetiva. "
+            "Responda sempre em português. "
             "Formate valores monetários como 'R$ 1.234,56'. "
             "Se a pergunta for ambígua, peça esclarecimentos. Seja preciso e não invente dados."
         ))
