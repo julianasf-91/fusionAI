@@ -106,8 +106,8 @@ def fiscal_llm_endpoint(req: func.HttpRequest) -> func.HttpResponse:
 
         llm = ChatOpenAI(
             model_name="gpt-4.1-nano-2025-04-14",
-            temperature=0.2,
-            max_tokens=400,
+            temperature=0.3,
+            max_tokens=800,
             openai_api_key=openai_api_key
         )
 
