@@ -72,7 +72,7 @@ def chamar_api(pergunta):
 
 # Exibe mensagens anteriores
 for msg in st.session_state.messages:
-    with st.chat_message(msg["role"], avatar="🧑" if msg["role"] == "user" else "🤖"):
+    with st.chat_message(msg["role"], avatar="🧑" if msg["role"] == "user" else "🔵"):
         st.write(msg["content"])
 
 # Entrada do usuário
@@ -89,7 +89,7 @@ if prompt:
 
     # Adiciona resposta do bot no chat
     st.session_state.messages.append({"role": "bot", "content": resposta})
-    with st.chat_message("bot", avatar="🤖"):
+    with st.chat_message("bot", avatar="🔵"):
         st.write(resposta)
 
 # Rodapé
