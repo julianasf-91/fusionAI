@@ -60,18 +60,43 @@ def fiscal_llm_endpoint(req: func.HttpRequest) -> func.HttpResponse:
         df_resultado = df_resultado.loc[:, ~df_resultado.columns.str.endswith('_y')]
         df_resultado.columns = df_resultado.columns.str.rstrip('_x')
 
+        # Conveter todas as colunas de data em Datetime
+        df_resultado['DATA EMISSÃO'] = pd.to_datetime(df_resultado['DATA EMISSÃO'])
+        df_resultado['DATA/HORA EVENTO MAIS RECENTE'] = pd.to_datetime(df_resultado['DATA/HORA EVENTO MAIS RECENTE'])
+
+        # Formatar colunas de data e hora
+        df_resultado['DATA EMISSÃO'] = df_resultado['DATA EMISSÃO'].dt.strftime('%d/%m/%Y %H:%M:%S')
+        df_resultado['DATA/HORA EVENTO MAIS RECENTE'] = df_resultado['DATA/HORA EVENTO MAIS RECENTE'].dt.strftime('%d/%m/%Y %H:%M:%S')
+
+        # Separar coluna de "DATA EMISSÃO" e "HORA EMISSÃO"
+        df_resultado[['DATA EMISSÃO', 'HORA EMISSÃO']] = df_resultado['DATA EMISSÃO'].str.split(' ', expand=True)
+
+        # Organizar ordem das colunas
+        df_resultado=df_resultado[['CHAVE DE ACESSO', 'MODELO', 'SÉRIE', 'NÚMERO', 'NATUREZA DA OPERAÇÃO',
+       'DATA EMISSÃO', 'HORA EMISSÃO', 'CPF/CNPJ Emitente', 'RAZÃO SOCIAL EMITENTE',
+       'INSCRIÇÃO ESTADUAL EMITENTE', 'UF EMITENTE', 'MUNICÍPIO EMITENTE',
+       'CNPJ DESTINATÁRIO', 'NOME DESTINATÁRIO', 'UF DESTINATÁRIO',
+       'INDICADOR IE DESTINATÁRIO', 'DESTINO DA OPERAÇÃO', 'CONSUMIDOR FINAL',
+       'PRESENÇA DO COMPRADOR', 'NÚMERO PRODUTO',
+       'DESCRIÇÃO DO PRODUTO/SERVIÇO', 'CÓDIGO NCM/SH',
+       'NCM/SH (TIPO DE PRODUTO)', 'CFOP', 'QUANTIDADE', 'UNIDADE',
+       'VALOR UNITÁRIO', 'VALOR TOTAL', 'EVENTO MAIS RECENTE',
+       'DATA/HORA EVENTO MAIS RECENTE', 'VALOR NOTA FISCAL']]
+
         # Configuração do agente LangChain
         system_prompt = SystemMessage(content=(
             "Você é um assistente especializado em dados fiscais. "
             "As colunas disponíveis no DataFrame são: "
-            "CHAVE DE ACESSO, MODELO, SÉRIE, NÚMERO, NATUREZA DA OPERAÇÃO, DATA EMISSÃO, CPF/CNPJ Emitente, "
+            "CHAVE DE ACESSO, MODELO, SÉRIE, NÚMERO, NATUREZA DA OPERAÇÃO, DATA EMISSÃO, HORA EMISSÃO, CPF/CNPJ Emitente, "
             "RAZÃO SOCIAL EMITENTE, INSCRIÇÃO ESTADUAL EMITENTE, UF EMITENTE, MUNICÍPIO EMITENTE, CNPJ DESTINATÁRIO, "
             "NOME DESTINATÁRIO, UF DESTINATÁRIO, INDICADOR IE DESTINATÁRIO, DESTINO DA OPERAÇÃO, CONSUMIDOR FINAL, "
             "PRESENÇA DO COMPRADOR, NÚMERO PRODUTO, DESCRIÇÃO DO PRODUTO/SERVIÇO, CÓDIGO NCM/SH, NCM/SH (TIPO DE PRODUTO), "
             "CFOP, QUANTIDADE, UNIDADE, VALOR UNITÁRIO, VALOR TOTAL, EVENTO MAIS RECENTE, DATA/HORA EVENTO MAIS RECENTE, "
             "VALOR NOTA FISCAL. "
+            "Você deve responder perguntas sobre notas fiscais com base nesses dados. "
+            "Explique brevemente o raciocínio usado antes de apresentar a resposta, especialmente em análises ou cálculos."
             "Responda sempre em português, com linguagem clara e objetiva. "
-            "Formate valores monetários como 'R$ 1.234,56' e datas como 'DD/MM/AAAA'. "
+            "Formate valores monetários como 'R$ 1.234,56'. "
             "Se a pergunta for ambígua, peça esclarecimentos. Seja preciso e não invente dados."
         ))
 
