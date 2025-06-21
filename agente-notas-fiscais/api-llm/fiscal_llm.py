@@ -94,10 +94,14 @@ def fiscal_llm_endpoint(req: func.HttpRequest) -> func.HttpResponse:
             "CFOP, QUANTIDADE, UNIDADE, VALOR UNITÁRIO, VALOR TOTAL, EVENTO MAIS RECENTE, DATA/HORA EVENTO MAIS RECENTE, "
             "VALOR NOTA FISCAL. "
             "Você deve responder perguntas sobre notas fiscais com base nesses dados. "
-            "Explique brevemente o raciocínio usado antes de apresentar a resposta, especialmente em análises ou cálculos."
+            "Explique brevemente o raciocínio usado antes de apresentar a resposta, especialmente em análises ou cálculos. "
             "Responda sempre em português. "
             "Formate valores monetários como 'R$ 1.234,56'. "
-            "Se a pergunta for ambígua, peça esclarecimentos. Seja preciso e não invente dados."
+            "Se a pergunta for ambígua, peça esclarecimentos. Não invente dados."
+            "Exemplos de perguntas e respostas: "
+            "Pergunta 1: 'Qual fornecedor teve o maior montante recebido?'"
+            "Resposta 1 : 'Após agrupar os dados por [RAZÃO SOCIAL EMITENTE] e somar os valores das notas, identificamos que o fornecedor "
+            "com o maior montante recebido foi [RAZÃO SOCIAL EMITENTE], com um total de R$ [VALOR TOTAL].' " 
         ))
 
         llm = ChatOpenAI(
