@@ -95,6 +95,6 @@ if prompt:
 # Rodapé
 st.markdown("""
     <div class='fusion-footer'>
-        Desenvolvido por <b>FusionAI</b> · <a href='https://github.com/julianasf-91/fusionAI' target='_blank'>GitHub</a>
+        Desenvolvido por <b>FusionAI by Juliana Ferreira</b> · <a href='https://github.com/julianasf-91/fusionAI' target='_blank'>GitHub</a>
     </div>
 """, unsafe_allow_html=True)
