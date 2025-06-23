@@ -12,3 +12,6 @@ azure-identity
 azure-keyvault-secrets
 requests
 tabulate
+azure-storage-blob
+pyarrow
+fastparquet

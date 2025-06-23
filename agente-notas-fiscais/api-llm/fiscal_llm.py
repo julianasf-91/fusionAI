@@ -16,6 +16,7 @@ from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
 from langchain.schema import SystemMessage
+from azure.storage.blob import BlobServiceClient, BlobClient
 
 fiscal_llm = func.Blueprint()
 
@@ -42,52 +43,79 @@ def fiscal_llm_endpoint(req: func.HttpRequest) -> func.HttpResponse:
         secret_client = SecretClient(vault_url=key_vault_url, credential=credential)
         openai_api_key = secret_client.get_secret(secret_name).value
 
-        # Download e processamento dos dados
-        url = 'https://drive.google.com/uc?export=download&id=1FlijXfHFSkFq0nf0I8mt3J9-NOOymR3y'
-        response = requests.get(url)
-        
-        with zipfile.ZipFile(BytesIO(response.content)) as zip_ref:
-            cabecalho_file = [f for f in zip_ref.namelist() if 'Cabecalho' in f][0]
-            itens_file = [f for f in zip_ref.namelist() if 'Itens' in f][0]
+        # Configuração do Azure Blob Storage
+        # Nome do container e do arquivo
+        container_name = "agentenotasfiscais"
+        blob_file_name = "df_resultado.parquet"
+
+        # Recuperar string de conexão do Key Vault
+        blob_connection_str = secret_client.get_secret("blobagente").value
+        blob_service_client = BlobServiceClient.from_connection_string(blob_connection_str)
+        container_client = blob_service_client.get_container_client(container_name)
+        blob_client = container_client.get_blob_client(blob_file_name)
+
+        # Verifica se o DataFrame já está salvo no blob
+        if blob_client.exists():
+            logging.info("Lendo DataFrame do blob via URL...")
+
+            # Construir URL pública ou com SAS
+            blob_url = f"https://{blob_service_client.account_name}.blob.core.windows.net/{container_name}/{blob_file_name}"
+            df_resultado = pd.read_parquet(blob_url)
+        else:
+            logging.info("Arquivo não encontrado. Processando dados...")
+
+            # Download e processamento dos dados
+            url = 'https://drive.google.com/uc?export=download&id=1FlijXfHFSkFq0nf0I8mt3J9-NOOymR3y'
+            response = requests.get(url)
             
-            with zip_ref.open(cabecalho_file) as cf:
-                df_cabecalho = pd.read_csv(cf)
-            
-            with zip_ref.open(itens_file) as itf:
-                df_itens = pd.read_csv(itf)
+            with zipfile.ZipFile(BytesIO(response.content)) as zip_ref:
+                cabecalho_file = [f for f in zip_ref.namelist() if 'Cabecalho' in f][0]
+                itens_file = [f for f in zip_ref.namelist() if 'Itens' in f][0]
+                
+                with zip_ref.open(cabecalho_file) as cf:
+                    df_cabecalho = pd.read_csv(cf)
+                
+                with zip_ref.open(itens_file) as itf:
+                    df_itens = pd.read_csv(itf)
 
-        df_resultado = pd.merge(df_itens, df_cabecalho, on='CHAVE DE ACESSO', how='left')
-        df_resultado = df_resultado.loc[:, ~df_resultado.columns.str.endswith('_y')]
-        df_resultado.columns = df_resultado.columns.str.rstrip('_x')
+            df_resultado = pd.merge(df_itens, df_cabecalho, on='CHAVE DE ACESSO', how='left')
+            df_resultado = df_resultado.loc[:, ~df_resultado.columns.str.endswith('_y')]
+            df_resultado.columns = df_resultado.columns.str.rstrip('_x')
 
-        # Conveter todas as colunas de data em Datetime
-        df_resultado['DATA EMISSÃO'] = pd.to_datetime(df_resultado['DATA EMISSÃO'])
-        df_resultado['DATA/HORA EVENTO MAIS RECENTE'] = pd.to_datetime(df_resultado['DATA/HORA EVENTO MAIS RECENTE'])
+            # Conveter todas as colunas de data em Datetime
+            df_resultado['DATA EMISSÃO'] = pd.to_datetime(df_resultado['DATA EMISSÃO'])
+            df_resultado['DATA/HORA EVENTO MAIS RECENTE'] = pd.to_datetime(df_resultado['DATA/HORA EVENTO MAIS RECENTE'])
 
-        # Formatar colunas de data e hora
-        df_resultado['DATA EMISSÃO'] = df_resultado['DATA EMISSÃO'].dt.strftime('%d/%m/%Y %H:%M:%S')
-        df_resultado['DATA/HORA EVENTO MAIS RECENTE'] = df_resultado['DATA/HORA EVENTO MAIS RECENTE'].dt.strftime('%d/%m/%Y %H:%M:%S')
+            # Formatar colunas de data e hora
+            df_resultado['DATA EMISSÃO'] = df_resultado['DATA EMISSÃO'].dt.strftime('%d/%m/%Y %H:%M:%S')
+            df_resultado['DATA/HORA EVENTO MAIS RECENTE'] = df_resultado['DATA/HORA EVENTO MAIS RECENTE'].dt.strftime('%d/%m/%Y %H:%M:%S')
 
-        # Separar coluna de "DATA EMISSÃO" e "HORA EMISSÃO"
-        df_resultado[['DATA EMISSÃO', 'HORA EMISSÃO']] = df_resultado['DATA EMISSÃO'].str.split(' ', expand=True)
+            # Separar coluna de "DATA EMISSÃO" e "HORA EMISSÃO"
+            df_resultado[['DATA EMISSÃO', 'HORA EMISSÃO']] = df_resultado['DATA EMISSÃO'].str.split(' ', expand=True)
 
-        # Organizar ordem das colunas
-        df_resultado=df_resultado[['CHAVE DE ACESSO', 'MODELO', 'SÉRIE', 'NÚMERO', 'NATUREZA DA OPERAÇÃO',
-       'DATA EMISSÃO', 'HORA EMISSÃO', 'CPF/CNPJ Emitente', 'RAZÃO SOCIAL EMITENTE',
-       'INSCRIÇÃO ESTADUAL EMITENTE', 'UF EMITENTE', 'MUNICÍPIO EMITENTE',
-       'CNPJ DESTINATÁRIO', 'NOME DESTINATÁRIO', 'UF DESTINATÁRIO',
-       'INDICADOR IE DESTINATÁRIO', 'DESTINO DA OPERAÇÃO', 'CONSUMIDOR FINAL',
-       'PRESENÇA DO COMPRADOR', 'NÚMERO PRODUTO',
-       'DESCRIÇÃO DO PRODUTO/SERVIÇO', 'CÓDIGO NCM/SH',
-       'NCM/SH (TIPO DE PRODUTO)', 'CFOP', 'QUANTIDADE', 'UNIDADE',
-       'VALOR UNITÁRIO', 'VALOR TOTAL', 'EVENTO MAIS RECENTE',
-       'DATA/HORA EVENTO MAIS RECENTE', 'VALOR NOTA FISCAL']]
+            # Organizar ordem das colunas
+            df_resultado=df_resultado[['CHAVE DE ACESSO', 'MODELO', 'SÉRIE', 'NÚMERO', 'NATUREZA DA OPERAÇÃO',
+            'DATA EMISSÃO', 'HORA EMISSÃO', 'CPF/CNPJ Emitente', 'RAZÃO SOCIAL EMITENTE',
+            'INSCRIÇÃO ESTADUAL EMITENTE', 'UF EMITENTE', 'MUNICÍPIO EMITENTE',
+            'CNPJ DESTINATÁRIO', 'NOME DESTINATÁRIO', 'UF DESTINATÁRIO',
+            'INDICADOR IE DESTINATÁRIO', 'DESTINO DA OPERAÇÃO', 'CONSUMIDOR FINAL',
+            'PRESENÇA DO COMPRADOR', 'NÚMERO PRODUTO',
+            'DESCRIÇÃO DO PRODUTO/SERVIÇO', 'CÓDIGO NCM/SH',
+            'NCM/SH (TIPO DE PRODUTO)', 'CFOP', 'QUANTIDADE', 'UNIDADE',
+            'VALOR UNITÁRIO', 'VALOR TOTAL', 'EVENTO MAIS RECENTE',
+            'DATA/HORA EVENTO MAIS RECENTE', 'VALOR NOTA FISCAL']]
         
-        # Salvar DataFrame resultante em CSV no Armazenamento de blobs do Azure
-        # (opcional, dependendo do uso posterior)
-        # df_resultado.to_csv('df_resultado.csv', index=False)
-        # Criar agente de análise de DataFrame com LLM
-        
+            # Salvar DataFrame no Azure Blob Storage
+            output_stream = BytesIO()
+            df_resultado.to_parquet(output_stream, index=False)
+            output_stream.seek(0)
+            blob_client.upload_blob(output_stream, overwrite=True)
+            logging.info("DataFrame salvo no Azure Blob Storage.")
+
+            # URL para leitura posterior
+            blob_url = f"https://{blob_service_client.account_name}.blob.core.windows.net/{container_name}/{blob_file_name}"
+            logging.info(f"DataFrame salvo. Pode ser acessado via URL: {blob_url}")
+            df_resultado = pd.read_parquet(blob_url)
 
         # # Prompt do sistema com Chain-of-Thought e exemplo de formatação
         system_prompt = SystemMessage(content=(
