@@ -82,26 +82,32 @@ def fiscal_llm_endpoint(req: func.HttpRequest) -> func.HttpResponse:
        'NCM/SH (TIPO DE PRODUTO)', 'CFOP', 'QUANTIDADE', 'UNIDADE',
        'VALOR UNITÁRIO', 'VALOR TOTAL', 'EVENTO MAIS RECENTE',
        'DATA/HORA EVENTO MAIS RECENTE', 'VALOR NOTA FISCAL']]
+        
+        # Salvar DataFrame resultante em CSV no Armazenamento de blobs do Azure
+        # (opcional, dependendo do uso posterior)
+        # df_resultado.to_csv('df_resultado.csv', index=False)
+        # Criar agente de análise de DataFrame com LLM
+        
 
-        # Configuração do agente LangChain
+        # # Prompt do sistema com Chain-of-Thought e exemplo de formatação
         system_prompt = SystemMessage(content=(
-            "Você é um assistente especializado em dados fiscais. "
-            "As colunas disponíveis no DataFrame são: "
-            "CHAVE DE ACESSO, MODELO, SÉRIE, NÚMERO, NATUREZA DA OPERAÇÃO, DATA EMISSÃO, HORA EMISSÃO, CPF/CNPJ Emitente, "
-            "RAZÃO SOCIAL EMITENTE, INSCRIÇÃO ESTADUAL EMITENTE, UF EMITENTE, MUNICÍPIO EMITENTE, CNPJ DESTINATÁRIO, "
-            "NOME DESTINATÁRIO, UF DESTINATÁRIO, INDICADOR IE DESTINATÁRIO, DESTINO DA OPERAÇÃO, CONSUMIDOR FINAL, "
-            "PRESENÇA DO COMPRADOR, NÚMERO PRODUTO, DESCRIÇÃO DO PRODUTO/SERVIÇO, CÓDIGO NCM/SH, NCM/SH (TIPO DE PRODUTO), "
-            "CFOP, QUANTIDADE, UNIDADE, VALOR UNITÁRIO, VALOR TOTAL, EVENTO MAIS RECENTE, DATA/HORA EVENTO MAIS RECENTE, "
-            "VALOR NOTA FISCAL. "
-            "Você deve responder perguntas sobre notas fiscais com base nesses dados. "
-            "Explique brevemente o raciocínio usado antes de apresentar a resposta, especialmente em análises ou cálculos. "
-            "Responda sempre em português. "
-            "Formate valores monetários como 'R$ 1.234,56'. "
-            "Se a pergunta for ambígua, peça esclarecimentos. Não invente dados."
-            "Exemplos de perguntas e respostas: "
-            "Pergunta 1: 'Qual fornecedor teve o maior montante recebido?'"
-            "Resposta 1 : 'Após agrupar os dados por [RAZÃO SOCIAL EMITENTE] e somar os valores das notas, identificamos que o fornecedor "
-            "com o maior montante recebido foi [RAZÃO SOCIAL EMITENTE], com um total de R$ [VALOR TOTAL].' " 
+            "Você é um assistente especializado em análise de notas fiscais usando pandas DataFrames. "
+            "Siga SEMPRE este formato de resposta:\n"
+            "1. Raciocínio: explique os passos de análise que realizou.\n"
+            "2. Query: mostre as queries pandas (ou pseudocódigo) utilizadas.\n"
+            "3. Resposta final: formate os resultados para leitura humana.\n\n"
+            "Colunas disponíveis: CHAVE DE ACESSO, MODELO, SÉRIE, NÚMERO, NATUREZA DA OPERAÇÃO, DATA EMISSÃO, HORA EMISSÃO, "
+            "CPF/CNPJ Emitente, RAZÃO SOCIAL EMITENTE, INSCRIÇÃO ESTADUAL EMITENTE, UF EMITENTE, MUNICÍPIO EMITENTE, "
+            "CNPJ DESTINATÁRIO, NOME DESTINATÁRIO, UF DESTINATÁRIO, INDICADOR IE DESTINATÁRIO, DESTINO DA OPERAÇÃO, "
+            "CONSUMIDOR FINAL, PRESENÇA DO COMPRADOR, NÚMERO PRODUTO, DESCRIÇÃO DO PRODUTO/SERVIÇO, CÓDIGO NCM/SH, "
+            "NCM/SH (TIPO DE PRODUTO), CFOP, QUANTIDADE, UNIDADE, VALOR UNITÁRIO, VALOR TOTAL, EVENTO MAIS RECENTE, "
+            "DATA/HORA EVENTO MAIS RECENTE, VALOR NOTA FISCAL.\n\n"
+            "Exemplo:\n"
+            "Pergunta: 'Qual o produto mais vendido?'\n"
+            "1. Raciocínio: Agrupei os dados por 'DESCRIÇÃO DO PRODUTO/SERVIÇO', somando a coluna 'QUANTIDADE'.\n"
+            "2. Query: df.groupby('DESCRIÇÃO DO PRODUTO/SERVIÇO')['QUANTIDADE'].sum().sort_values(ascending=False).head(1)\n"
+            "3. Resposta final: O produto mais vendido foi 'CIMENTO CP-II' com 1.245 unidades.\n\n"
+            "Sempre responda em português e explique seu raciocínio com clareza antes de responder."
         ))
 
         llm = ChatOpenAI(
@@ -120,8 +126,17 @@ def fiscal_llm_endpoint(req: func.HttpRequest) -> func.HttpResponse:
             allow_dangerous_code=True
         )
 
+        # Prompt com instrução explícita ao modelo
+        prompt_usuario = f"""Responda à pergunta abaixo seguindo este formato:
+        1. Raciocínio: explique como chegou à resposta.
+        2. Query: mostre o código/pandas utilizado.
+        3. Resposta final: apresente o resultado de forma clara e objetiva.
+
+        Pergunta: {pergunta}
+        """
+
         # Obter resposta
-        resposta = agent.invoke(pergunta)['output']
+        resposta = agent.invoke(prompt_usuario)['output']
 
         return func.HttpResponse(resposta, status_code=200)
 
