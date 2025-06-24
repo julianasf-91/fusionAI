@@ -86,24 +86,8 @@ def fiscal_llm_endpoint(req: func.HttpRequest) -> func.HttpResponse:
             df_resultado['DATA EMISSÃO'] = pd.to_datetime(df_resultado['DATA EMISSÃO'])
             df_resultado['DATA/HORA EVENTO MAIS RECENTE'] = pd.to_datetime(df_resultado['DATA/HORA EVENTO MAIS RECENTE'])
 
-            # Formatar colunas de data e hora
-            df_resultado['DATA EMISSÃO'] = df_resultado['DATA EMISSÃO'].dt.strftime('%d/%m/%Y %H:%M:%S')
-            df_resultado['DATA/HORA EVENTO MAIS RECENTE'] = df_resultado['DATA/HORA EVENTO MAIS RECENTE'].dt.strftime('%d/%m/%Y %H:%M:%S')
-
-            # Separar coluna de "DATA EMISSÃO" e "HORA EMISSÃO"
-            df_resultado[['DATA EMISSÃO', 'HORA EMISSÃO']] = df_resultado['DATA EMISSÃO'].str.split(' ', expand=True)
-
-            # Organizar ordem das colunas
-            df_resultado=df_resultado[['CHAVE DE ACESSO', 'MODELO', 'SÉRIE', 'NÚMERO', 'NATUREZA DA OPERAÇÃO',
-            'DATA EMISSÃO', 'HORA EMISSÃO', 'CPF/CNPJ Emitente', 'RAZÃO SOCIAL EMITENTE',
-            'INSCRIÇÃO ESTADUAL EMITENTE', 'UF EMITENTE', 'MUNICÍPIO EMITENTE',
-            'CNPJ DESTINATÁRIO', 'NOME DESTINATÁRIO', 'UF DESTINATÁRIO',
-            'INDICADOR IE DESTINATÁRIO', 'DESTINO DA OPERAÇÃO', 'CONSUMIDOR FINAL',
-            'PRESENÇA DO COMPRADOR', 'NÚMERO PRODUTO',
-            'DESCRIÇÃO DO PRODUTO/SERVIÇO', 'CÓDIGO NCM/SH',
-            'NCM/SH (TIPO DE PRODUTO)', 'CFOP', 'QUANTIDADE', 'UNIDADE',
-            'VALOR UNITÁRIO', 'VALOR TOTAL', 'EVENTO MAIS RECENTE',
-            'DATA/HORA EVENTO MAIS RECENTE', 'VALOR NOTA FISCAL']]
+            # Remove coluna "Valor nota fiscal"
+            df_resultado.drop(columns=['VALOR NOTA FISCAL'], inplace=True)
         
             # Salvar DataFrame no Azure Blob Storage
             output_stream = BytesIO()
@@ -131,11 +115,18 @@ def fiscal_llm_endpoint(req: func.HttpRequest) -> func.HttpResponse:
             "NCM/SH (TIPO DE PRODUTO), CFOP, QUANTIDADE, UNIDADE, VALOR UNITÁRIO, VALOR TOTAL, EVENTO MAIS RECENTE, "
             "DATA/HORA EVENTO MAIS RECENTE, VALOR NOTA FISCAL.\n\n"
             "Exemplo:\n"
-            "Pergunta: 'Qual o produto mais vendido?'\n"
+            "Pergunta: 'Quantos CNPJs distintos de emitentes existem?'\n"
+            "1. Raciocínio: O CNPJ do emitente está associado à nota, e não ao item. Como há repetição por itens, apliquei drop_duplicates sobre a coluna “CHAVE DE ACESSO” para garantir contagem correta.\n"
+            "2. Query: df.drop_duplicates(subset='CHAVE DE ACESSO')['CPF/CNPJ Emitente'].nunique()\n"
+            "3. Resposta final: Existem 43 CNPJs distintos de emitentes cadastrados nas notas fiscais.\n\n"
+            "Pergunta 2: 'Qual o produto mais vendido?'\n"
             "1. Raciocínio: Agrupei os dados por 'DESCRIÇÃO DO PRODUTO/SERVIÇO', somando a coluna 'QUANTIDADE'.\n"
-            "2. Query: df.groupby('DESCRIÇÃO DO PRODUTO/SERVIÇO')['QUANTIDADE'].sum().sort_values(ascending=False).head(1)\n"
+            "2. Query: df.groupby('DESCRIÇÃO DO PRODUTO/SERVIÇO')['QUANTIDADE'].sum().sort_values(ascending=False).head(1)\n\n"
             "3. Resposta final: O produto mais vendido foi 'CIMENTO CP-II' com 1.245 unidades.\n\n"
             "Sempre responda em português e explique seu raciocínio com clareza antes de responder."
+            "IMPORTANTE: Sempre que a pergunta envolver dados únicos por nota fiscal (CHAVE DE ACESSO, RAZÃO SOCIAL EMITENTE, CPF/CNPJ Emitente, UF EMITENTE, CNPJ DESTINATÁRIO, NOME DESTINATÁRIO, etc.), "
+            "use df.drop_duplicates(subset='CHAVE DE ACESSO')"
+            "Colunas como: DESCRIÇÃO DO PRODUTO/SERVIÇO, QUANTIDADE, VALOR UNITÁRIO, UNIDADE, etc. Devem ser analisadas no nível do item, ou seja, sem remover duplicações"
         ))
 
         llm = ChatOpenAI(
@@ -156,7 +147,7 @@ def fiscal_llm_endpoint(req: func.HttpRequest) -> func.HttpResponse:
 
         # Prompt com instrução explícita ao modelo
         prompt_usuario = f"""Responda à pergunta abaixo seguindo este formato:
-        1. Raciocínio: explique como chegou à resposta.
+        1. Raciocínio:  explique como chegou à resposta.
         2. Query: mostre o código/pandas utilizado.
         3. Resposta final: apresente o resultado de forma clara e objetiva.
 
